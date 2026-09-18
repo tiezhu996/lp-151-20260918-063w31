@@ -57,13 +57,14 @@ func main() {
 	likeRepo := repository.NewLikeRepository(db)
 	sensitiveRepo := repository.NewSensitiveWordRepository(db)
 	reviewRepo := repository.NewReviewQueueRepository(db)
+	txManager := repository.NewTxManager(db)
 
 	// Services
 	tokenService := service.NewTokenService(cfg.JWTSecret, cfg.JWTExpireMin)
 	identityService := service.NewIdentityService(identityRepo, tokenService, logger)
 	tagService := service.NewTagService(tagRepo)
 	sensitiveService := service.NewSensitiveWordService(sensitiveRepo)
-	reviewService := service.NewReviewService(reviewRepo, postRepo, commentRepo, logger)
+	reviewService := service.NewReviewService(reviewRepo, postRepo, commentRepo, txManager, logger)
 	postService := service.NewPostService(postRepo, tagService, sensitiveService, reviewService, logger)
 	commentService := service.NewCommentService(commentRepo, postRepo, sensitiveService, reviewService, logger)
 	likeService := service.NewLikeService(likeRepo, postRepo, commentRepo, logger)

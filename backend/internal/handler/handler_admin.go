@@ -84,8 +84,20 @@ func (h *AdminHandler) ReviewItem(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		h.logger.Error("review action", "error", err)
-		Fail(c, http.StatusInternalServerError, constants.CodeInternal, "review action failed")
+		switch {
+		case errors.Is(err, service.ErrReviewNotFound):
+			// 审核项不存在：明确 404，不产生任何副作用。
+			Fail(c, http.StatusNotFound, constants.CodeNotFound, "review item not found")
+		case errors.Is(err, service.ErrReviewConflict):
+			// 重复处理或并发竞争：仅一个请求生效，其余返回明确冲突结果。
+			Fail(c, http.StatusConflict, constants.CodeConflict, "review item already processed or state changed")
+		case errors.Is(err, service.ErrReviewTargetMissing):
+			// 被审内容已被删除，状态与计数均未改变。
+			Fail(c, http.StatusConflict, constants.CodeConflict, "review target content missing")
+		default:
+			h.logger.Error("review action", "error", err)
+			Fail(c, http.StatusInternalServerError, constants.CodeInternal, "review action failed")
+		}
 		return
 	}
 	OK(c, gin.H{"action": req.Action})

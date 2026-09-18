@@ -196,6 +196,10 @@ paths:
       responses:
         '200':
           description: 审核结果
+        '404':
+          description: 审核项不存在，未产生任何副作用
+        '409':
+          description: 冲突：审核项已被处理（重复/并发竞争），或被审内容已删除；本次操作未生效，评论数未改变
   /api/v1/admin/sensitive-words:
     get:
       summary: 敏感词列表

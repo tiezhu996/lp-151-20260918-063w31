@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/gbtreehole/backend/internal/model"
 	"gorm.io/gorm"
@@ -14,6 +15,11 @@ type CommentRepository interface {
 	FindByID(id uint) (*model.Comment, error)
 	ListByPostID(postID uint, page, pageSize int, status int) ([]model.Comment, int64, error)
 	ListByIDs(ids []uint) ([]model.Comment, error)
+	// TransitionStatus atomically moves a comment from wantStatus to toStatus
+	// and bumps updated_at inside the given transaction. Returns
+	// ErrTargetMissing when the comment is absent and ErrTargetStateConflict
+	// when its current status is not wantStatus.
+	TransitionStatus(tx *gorm.DB, id uint, wantStatus, toStatus int) error
 }
 
 type commentRepository struct {
@@ -74,4 +80,28 @@ func (r *commentRepository) ListByIDs(ids []uint) ([]model.Comment, error) {
 		return nil, fmt.Errorf("list comments by ids: %w", err)
 	}
 	return comments, nil
+}
+
+func (r *commentRepository) TransitionStatus(tx *gorm.DB, id uint, wantStatus, toStatus int) error {
+	handle := r.db
+	if tx != nil {
+		handle = tx
+	}
+	result := handle.Model(&model.Comment{}).
+		Where("id = ? AND status = ?", id, wantStatus).
+		Updates(map[string]any{"status": toStatus, "updated_at": time.Now()})
+	if result.Error != nil {
+		return fmt.Errorf("transition comment status: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		var count int64
+		if err := handle.Model(&model.Comment{}).Where("id = ?", id).Count(&count).Error; err != nil {
+			return fmt.Errorf("check comment after status transition: %w", err)
+		}
+		if count == 0 {
+			return ErrTargetMissing
+		}
+		return fmt.Errorf("%w: comment %d is not in status %d", ErrTargetStateConflict, id, wantStatus)
+	}
+	return nil
 }

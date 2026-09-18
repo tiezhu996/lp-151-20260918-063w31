@@ -8,6 +8,7 @@ export default function AdminPage() {
   const [reviews, setReviews] = useState<ReviewItem[]>([])
   const [words, setWords] = useState<{ id: number; word: string }[]>([])
   const [status, setStatus] = useState(1)
+  const [actingId, setActingId] = useState<number | null>(null)
 
   const loadReviews = async () => {
     try {
@@ -33,12 +34,20 @@ export default function AdminPage() {
   }, [status])
 
   const action = async (queueId: number, act: 'approve' | 'reject') => {
+    // 同一审核项只允许生效一次：请求中禁用按钮，避免双击重复提交。
+    setActingId(queueId)
     try {
       await request('post', '/admin/reviews/action', { queueId, action: act, note: '' })
       message.success(act === 'approve' ? '已放行' : '已屏蔽')
       loadReviews()
     } catch (e) {
-      message.error((e as Error).message)
+      const anyErr = e as { response?: { data?: { message?: string } } }
+      // 重复处理/并发竞争时后端返回 409 冲突，展示明确冲突结果。
+      message.error(anyErr.response?.data?.message || (e as Error).message)
+      // 刷新队列，让被其他请求先处理掉的审核项按钮与状态同步。
+      loadReviews()
+    } finally {
+      setActingId(null)
     }
   }
 
@@ -68,8 +77,8 @@ export default function AdminPage() {
                     actions={
                       item.status === 1
                         ? [
-                            <Button key="approve" type="primary" size="small" icon={<CheckOutlined />} onClick={() => action(item.id, 'approve')}>放行</Button>,
-                            <Button key="reject" danger size="small" icon={<CloseOutlined />} onClick={() => action(item.id, 'reject')}>屏蔽</Button>,
+                            <Button key="approve" type="primary" size="small" icon={<CheckOutlined />} loading={actingId === item.id} disabled={actingId !== null && actingId !== item.id} onClick={() => action(item.id, 'approve')}>放行</Button>,
+                            <Button key="reject" danger size="small" icon={<CloseOutlined />} disabled={actingId !== null} onClick={() => action(item.id, 'reject')}>屏蔽</Button>,
                           ]
                         : undefined
                     }

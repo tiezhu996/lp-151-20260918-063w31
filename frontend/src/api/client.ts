@@ -30,11 +30,19 @@ client.interceptors.response.use(
 )
 
 export async function request<T>(method: 'get' | 'post' | 'delete', url: string, data?: unknown): Promise<T> {
-  const response = await client.request<ApiResponse<T>>({
-    method,
-    url,
-    ...(method === 'get' ? { params: data } : { data }),
-  })
+  let response
+  try {
+    response = await client.request<ApiResponse<T>>({
+      method,
+      url,
+      ...(method === 'get' ? { params: data } : { data }),
+    })
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.data?.message) {
+      throw new Error(err.response.data.message)
+    }
+    throw err
+  }
   if (response.data.code !== 0) {
     throw new Error(response.data.message || '请求失败')
   }

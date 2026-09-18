@@ -17,6 +17,11 @@ type PostRepository interface {
 	ListHot(limit int) ([]model.Post, error)
 	ListFeatured(limit int) ([]model.Post, error)
 	IncrementView(id uint) error
+	// IncrementCommentCount 原子地把评论数 +1，避免读改写丢更新。
+	IncrementCommentCount(id uint) error
+	// UpdateStatusIf 仅当帖子当前状态为 fromStatus 时才更新为 toStatus，
+	// 返回是否实际更新；用于审核放行/屏蔽的幂等保护。
+	UpdateStatusIf(id uint, fromStatus, toStatus int) (bool, error)
 }
 
 type postRepository struct {
@@ -110,4 +115,26 @@ func (r *postRepository) IncrementView(id uint) error {
 		return fmt.Errorf("increment view: %w", err)
 	}
 	return nil
+}
+
+func (r *postRepository) IncrementCommentCount(id uint) error {
+	result := r.db.Model(&model.Post{}).Where("id = ?", id).
+		UpdateColumn("comment_count", gorm.Expr("comment_count + 1"))
+	if result.Error != nil {
+		return fmt.Errorf("increment comment count: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *postRepository) UpdateStatusIf(id uint, fromStatus, toStatus int) (bool, error) {
+	result := r.db.Model(&model.Post{}).
+		Where("id = ? AND status = ?", id, fromStatus).
+		Update("status", toStatus)
+	if result.Error != nil {
+		return false, fmt.Errorf("update post status: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
 }

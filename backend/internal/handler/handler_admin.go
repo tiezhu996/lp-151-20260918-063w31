@@ -84,11 +84,28 @@ func (h *AdminHandler) ReviewItem(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		h.logger.Error("review action", "error", err)
-		Fail(c, http.StatusInternalServerError, constants.CodeInternal, "review action failed")
-		return
+		switch {
+		case errors.Is(err, service.ErrReviewConflict):
+			// 重复处理或并发竞争：审核项已有终态，本次操作未生效。
+			Fail(c, http.StatusConflict, constants.CodeConflict, "review item already processed")
+			return
+		case errors.Is(err, service.ErrReviewNotFound):
+			Fail(c, http.StatusNotFound, constants.CodeNotFound, "review item not found")
+			return
+		case errors.Is(err, service.ErrReviewTargetMissing):
+			Fail(c, http.StatusNotFound, constants.CodeNotFound, "review target missing")
+			return
+		default:
+			h.logger.Error("review action", "error", err)
+			Fail(c, http.StatusInternalServerError, constants.CodeInternal, "review action failed")
+			return
+		}
 	}
-	OK(c, gin.H{"action": req.Action})
+	finalStatus := constants.ReviewStatusApproved
+	if req.Action == "reject" {
+		finalStatus = constants.ReviewStatusRejected
+	}
+	OK(c, gin.H{"action": req.Action, "queueId": req.QueueID, "status": finalStatus})
 }
 
 // ListSensitiveWords 敏感词列表

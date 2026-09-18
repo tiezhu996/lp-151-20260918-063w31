@@ -57,10 +57,8 @@ func (s *commentService) Create(identityID, postID uint, content string) (*model
 		return nil, hits, blocked, err
 	}
 	if !blocked {
-		post.CommentCount++
-		post.UpdatedAt = time.Now()
-		if err := s.posts.Update(post); err != nil {
-			s.logger.Error("update post comment count", "error", err)
+		if err := s.posts.IncrementCommentCount(post.ID); err != nil {
+			s.logger.Error("increment post comment count", "error", err)
 		}
 	} else {
 		if err := s.review.Enqueue("comment", comment.ID, content, hits); err != nil {

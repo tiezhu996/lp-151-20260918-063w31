@@ -35,10 +35,11 @@ export default function AdminPage() {
   const action = async (queueId: number, act: 'approve' | 'reject') => {
     try {
       await request('post', '/admin/reviews/action', { queueId, action: act, note: '' })
-      message.success(act === 'approve' ? '已放行' : '已屏蔽')
+      message.success(act === 'approve' ? '已放行，评论数已补回' : '已屏蔽')
       loadReviews()
     } catch (e) {
-      message.error((e as Error).message)
+      const msg = (e as Error).message || '操作失败'
+      message.error(msg.includes('already processed') ? '该审核项已处理，请勿重复操作' : msg)
     }
   }
 

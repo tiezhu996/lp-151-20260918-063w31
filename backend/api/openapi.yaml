@@ -183,6 +183,11 @@ paths:
   /api/v1/admin/reviews/action:
     post:
       summary: 审核放行/屏蔽
+      description: >
+        同一审核项只允许生效一次：放行(approve)评论会在同一事务内把所属帖子的
+        comment_count 补回，评论随后在帖子详情页可见；屏蔽(reject)则评论保持
+        不可见且不计入评论数。重复提交或并发处理时仅一个请求返回 200，
+        其余返回 409 冲突（code=40900）。
       requestBody:
         content:
           application/json:
@@ -195,7 +200,11 @@ paths:
                 note: { type: string }
       responses:
         '200':
-          description: 审核结果
+          description: 审核生效，返回 action 与终态 status（2 放行 / 3 屏蔽）
+        '404':
+          description: 审核项不存在或其指向的内容已删除
+        '409':
+          description: 审核项已被处理（重复或并发竞争），本次操作未生效
   /api/v1/admin/sensitive-words:
     get:
       summary: 敏感词列表

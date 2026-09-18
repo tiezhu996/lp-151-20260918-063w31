@@ -14,6 +14,9 @@ type CommentRepository interface {
 	FindByID(id uint) (*model.Comment, error)
 	ListByPostID(postID uint, page, pageSize int, status int) ([]model.Comment, int64, error)
 	ListByIDs(ids []uint) ([]model.Comment, error)
+	// UpdateStatusIf 仅当评论当前状态为 fromStatus 时才更新为 toStatus，
+	// 返回是否实际更新；用于审核放行/屏蔽的幂等保护。
+	UpdateStatusIf(id uint, fromStatus, toStatus int) (bool, error)
 }
 
 type commentRepository struct {
@@ -74,4 +77,14 @@ func (r *commentRepository) ListByIDs(ids []uint) ([]model.Comment, error) {
 		return nil, fmt.Errorf("list comments by ids: %w", err)
 	}
 	return comments, nil
+}
+
+func (r *commentRepository) UpdateStatusIf(id uint, fromStatus, toStatus int) (bool, error) {
+	result := r.db.Model(&model.Comment{}).
+		Where("id = ? AND status = ?", id, fromStatus).
+		Update("status", toStatus)
+	if result.Error != nil {
+		return false, fmt.Errorf("update comment status: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
 }
